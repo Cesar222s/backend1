@@ -4,9 +4,76 @@ const jwt = require("jsonwebtoken");
 const { randomUUID } = require("crypto");
 const User = require("../models/User");
 const Session = require("../models/Session");
+
+const PasswordResetToken = require("../models/PasswordResetToken");
+const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 const auth = require("../middleware/auth");
 
 const router = express.Router();
+
+// POST /api/auth/forgot-password
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Falta el correo electrónico" });
+    }
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // Por seguridad, responder igual aunque el usuario no exista
+      return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });
+    }
+    // Generar token seguro
+    const token = crypto.randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
+    await PasswordResetToken.create({ user_id: user._id, token, expires_at: expires });
+
+    // Configurar transporte de correo (ajustar con tus credenciales)
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${token}`;
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Restablece tu contraseña - SIAC",
+      text: `Solicitaste restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`
+    });
+    return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });
+  } catch (err) {
+    return res.status(500).json({ message: "Error en el servidor" });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ message: "Faltan datos" });
+    }
+    const resetToken = await PasswordResetToken.findOne({ token });
+    if (!resetToken || resetToken.used || resetToken.expires_at < new Date()) {
+      return res.status(400).json({ message: "Token inválido o expirado" });
+    }
+    const user = await User.findById(resetToken.user_id);
+    if (!user) {
+      return res.status(400).json({ message: "Usuario no encontrado" });
+    }
+    user.password_hash = await bcrypt.hash(password, 10);
+    await user.save();
+    resetToken.used = true;
+    await resetToken.save();
+    return res.json({ message: "Contraseña restablecida correctamente" });
+  } catch (err) {
+    return res.status(500).json({ message: "Error en el servidor" });
+  }
+});
 
 router.post("/register", async (req, res) => {
   try {
