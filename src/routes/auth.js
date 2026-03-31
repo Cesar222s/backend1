@@ -38,15 +38,21 @@ router.post("/forgot-password", async (req, res) => {
       }
     });
     const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${token}`;
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Restablece tu contraseña - SIAC",
-      text: `Solicitaste restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`
-    });
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Restablece tu contraseña - SIAC",
+        text: `Solicitaste restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`
+      });
+    } catch (emailErr) {
+      console.error("Error enviando correo de recuperación:", emailErr);
+      return res.status(500).json({ message: "Error enviando correo de recuperación", error: emailErr.message });
+    }
     return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });
   } catch (err) {
-    return res.status(500).json({ message: "Error en el servidor" });
+    console.error("Error en forgot-password:", err);
+    return res.status(500).json({ message: "Error en el servidor", error: err.message });
   }
 });
 
