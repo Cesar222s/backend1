@@ -1,27 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Session = require("../models/Session");
 const User = require("../models/User");
-const admin = require("firebase-admin");
-
-let firebaseApp = null;
-
-function getFirebaseApp() {
-  if (firebaseApp) return firebaseApp;
-
-  const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!rawCredentials) return null;
-
-  try {
-    const credentials = JSON.parse(rawCredentials);
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert(credentials)
-    });
-    return firebaseApp;
-  } catch (err) {
-    console.error("Firebase admin init failed:", err);
-    return null;
-  }
-}
+const getFirebaseApp = require("../utils/firebaseAdmin");
 
 async function auth(req, res, next) {
   const header = req.headers.authorization || "";

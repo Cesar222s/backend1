@@ -3,31 +3,9 @@ const User = require("../models/User");
 const Session = require("../models/Session");
 const PasswordResetToken = require("../models/PasswordResetToken");
 const auth = require("../middleware/auth");
-const admin = require("firebase-admin");
+const getFirebaseAdmin = require("../utils/firebaseAdmin");
 
 const router = express.Router();
-
-function getFirebaseAdmin() {
-  if (admin.apps.length > 0) {
-    return admin;
-  }
-
-  const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!rawCredentials) {
-    return null;
-  }
-
-  try {
-    const credentials = JSON.parse(rawCredentials);
-    admin.initializeApp({
-      credential: admin.credential.cert(credentials)
-    });
-    return admin;
-  } catch (err) {
-    console.error("Firebase admin init failed in profile route:", err);
-    return null;
-  }
-}
 
 router.get("/", auth, async (req, res) => {
   try {
