@@ -6,11 +6,13 @@ const User = require("../models/User");
 const Session = require("../models/Session");
 
 const PasswordResetToken = require("../models/PasswordResetToken");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 const crypto = require("crypto");
 const auth = require("../middleware/auth");
 
 const router = express.Router();
+
+const resend = new Resend(process.env.RESEND_API_KEY || "");
 
 // POST /api/auth/forgot-password
 router.post("/forgot-password", async (req, res) => {
@@ -24,30 +26,41 @@ router.post("/forgot-password", async (req, res) => {
       // Por seguridad, responder igual aunque el usuario no exista
       return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });
     }
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({ message: "RESEND_API_KEY no configurado" });
+    }
+    if (!process.env.EMAIL_FROM) {
+      return res.status(500).json({ message: "EMAIL_FROM no configurado" });
+    }
     // Generar token seguro
     const token = crypto.randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
     await PasswordResetToken.create({ user_id: user._id, token, expires_at: expires });
 
-    // Configurar transporte de correo (ajustar con tus credenciales)
-    const transporter = nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
     const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${token}`;
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      const resendTimeoutMs = 15000;
+      const sendEmailPromise = resend.emails.send({
+        from: process.env.EMAIL_FROM,
         to: user.email,
         subject: "Restablece tu contraseña - SIAC",
-        text: `Solicitaste restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`
+        text: `Solicitaste restablecer tu contraseña. Usa este enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`
       });
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("RESEND_TIMEOUT")), resendTimeoutMs);
+      });
+      const { error } = await Promise.race([sendEmailPromise, timeoutPromise]);
+      if (error) {
+        console.error("Error enviando correo de recuperación (Resend):", error);
+        return res.status(500).json({ message: "No se pudo enviar el correo de recuperación" });
+      }
     } catch (emailErr) {
-      console.error("Error enviando correo de recuperación:", emailErr);
-      return res.status(500).json({ message: "Error enviando correo de recuperación", error: emailErr.message });
+      if (emailErr && emailErr.message === "RESEND_TIMEOUT") {
+        console.error("Timeout enviando correo de recuperación (Resend)");
+        return res.status(504).json({ message: "El servicio de correo está tardando. Intenta de nuevo." });
+      }
+      console.error("Error enviando correo de recuperación (Resend):", emailErr);
+      return res.status(500).json({ message: "No se pudo enviar el correo de recuperación" });
     }
     return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });
   } catch (err) {
