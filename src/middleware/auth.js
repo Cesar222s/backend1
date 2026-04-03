@@ -1,5 +1,27 @@
 const jwt = require("jsonwebtoken");
 const Session = require("../models/Session");
+const User = require("../models/User");
+const admin = require("firebase-admin");
+
+let firebaseApp = null;
+
+function getFirebaseApp() {
+  if (firebaseApp) return firebaseApp;
+
+  const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!rawCredentials) return null;
+
+  try {
+    const credentials = JSON.parse(rawCredentials);
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert(credentials)
+    });
+    return firebaseApp;
+  } catch (err) {
+    console.error("Firebase admin init failed:", err);
+    return null;
+  }
+}
 
 async function auth(req, res, next) {
   const header = req.headers.authorization || "";
@@ -7,6 +29,31 @@ async function auth(req, res, next) {
 
   if (!token) {
     return res.status(401).json({ message: "Missing token" });
+  }
+
+  const firebase = getFirebaseApp();
+  if (firebase) {
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      const email = (decoded.email || "").toLowerCase();
+
+      if (!email) {
+        return res.status(401).json({ message: "Invalid token" });
+      }
+
+      const user = await User.findOne({ email }).lean();
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      req.userId = user._id.toString();
+      req.tokenId = decoded.uid;
+      req.token = token;
+      req.authProvider = "firebase";
+      return next();
+    } catch (_err) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
   }
 
   try {
@@ -25,7 +72,7 @@ async function auth(req, res, next) {
     req.userId = payload.sub;
     req.tokenId = tokenId;
     req.token = token;
-    next();
+    return next();
   } catch (_err) {
     return res.status(401).json({ message: "Invalid token" });
   }

@@ -10,6 +10,4 @@ const passwordResetTokenSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-passwordResetTokenSchema.index({ token: 1 });
-
 module.exports = mongoose.model("PasswordResetToken", passwordResetTokenSchema);

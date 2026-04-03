@@ -6,13 +6,11 @@ const User = require("../models/User");
 const Session = require("../models/Session");
 
 const PasswordResetToken = require("../models/PasswordResetToken");
-const { Resend } = require("resend");
 const crypto = require("crypto");
 const auth = require("../middleware/auth");
+const { sendMail } = require("../utils/mailer");
 
 const router = express.Router();
-
-const resend = new Resend(process.env.RESEND_API_KEY || "");
 
 // POST /api/auth/forgot-password
 router.post("/forgot-password", async (req, res) => {
@@ -26,12 +24,6 @@ router.post("/forgot-password", async (req, res) => {
       // Por seguridad, responder igual aunque el usuario no exista
       return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });
     }
-    if (!process.env.RESEND_API_KEY) {
-      return res.status(500).json({ message: "RESEND_API_KEY no configurado" });
-    }
-    if (!process.env.EMAIL_FROM) {
-      return res.status(500).json({ message: "EMAIL_FROM no configurado" });
-    }
     // Generar token seguro
     const token = crypto.randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
@@ -39,27 +31,22 @@ router.post("/forgot-password", async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${token}`;
     try {
-      const resendTimeoutMs = 15000;
-      const sendEmailPromise = resend.emails.send({
-        from: process.env.EMAIL_FROM,
+      await sendMail({
         to: user.email,
         subject: "Restablece tu contraseña - SIAC",
-        text: `Solicitaste restablecer tu contraseña. Usa este enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`
+        text: `Solicitaste restablecer tu contraseña. Usa este enlace para crear una nueva contraseña (válido por 30 minutos):\n\n${resetUrl}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
+            <h2 style="margin: 0 0 12px; color: #0f766e;">Restablece tu contraseña</h2>
+            <p>Solicitaste restablecer tu contraseña en SIAC.</p>
+            <p>Usa este enlace para crear una nueva contraseña. El enlace es válido por 30 minutos.</p>
+            <p><a href="${resetUrl}">Restablecer contraseña</a></p>
+            <p>Si no fuiste tú, ignora este correo.</p>
+          </div>
+        `
       });
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("RESEND_TIMEOUT")), resendTimeoutMs);
-      });
-      const { error } = await Promise.race([sendEmailPromise, timeoutPromise]);
-      if (error) {
-        console.error("Error enviando correo de recuperación (Resend):", error);
-        return res.status(500).json({ message: "No se pudo enviar el correo de recuperación" });
-      }
     } catch (emailErr) {
-      if (emailErr && emailErr.message === "RESEND_TIMEOUT") {
-        console.error("Timeout enviando correo de recuperación (Resend)");
-        return res.status(504).json({ message: "El servicio de correo está tardando. Intenta de nuevo." });
-      }
-      console.error("Error enviando correo de recuperación (Resend):", emailErr);
+      console.error("Error enviando correo de recuperación (Gmail SMTP):", emailErr);
       return res.status(500).json({ message: "No se pudo enviar el correo de recuperación" });
     }
     return res.json({ message: "Si el correo está registrado, recibirás instrucciones para restablecer tu contraseña." });

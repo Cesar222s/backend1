@@ -1,8 +1,33 @@
 const express = require("express");
 const User = require("../models/User");
+const Session = require("../models/Session");
+const PasswordResetToken = require("../models/PasswordResetToken");
 const auth = require("../middleware/auth");
+const admin = require("firebase-admin");
 
 const router = express.Router();
+
+function getFirebaseAdmin() {
+  if (admin.apps.length > 0) {
+    return admin;
+  }
+
+  const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!rawCredentials) {
+    return null;
+  }
+
+  try {
+    const credentials = JSON.parse(rawCredentials);
+    admin.initializeApp({
+      credential: admin.credential.cert(credentials)
+    });
+    return admin;
+  } catch (err) {
+    console.error("Firebase admin init failed in profile route:", err);
+    return null;
+  }
+}
 
 router.get("/", auth, async (req, res) => {
   try {
@@ -44,6 +69,35 @@ router.put("/", auth, async (req, res) => {
       email: user.email,
       photo_url: user.photo_url || ""
     });
+  } catch (_err) {
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.delete("/", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const firebase = getFirebaseAdmin();
+    if (firebase && req.authProvider === "firebase") {
+      try {
+        await firebase.auth().deleteUser(req.tokenId);
+      } catch (firebaseErr) {
+        console.error("Error deleting Firebase user:", firebaseErr);
+        return res.status(500).json({ message: "No se pudo eliminar el usuario de Firebase" });
+      }
+    }
+
+    await Promise.all([
+      Session.deleteMany({ user_id: req.userId }),
+      PasswordResetToken.deleteMany({ user_id: req.userId }),
+      User.deleteOne({ _id: req.userId })
+    ]);
+
+    return res.json({ message: "Usuario eliminado correctamente" });
   } catch (_err) {
     return res.status(500).json({ message: "Server error" });
   }

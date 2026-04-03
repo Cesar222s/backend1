@@ -7,6 +7,7 @@ const morgan = require("morgan");
 const path = require("path");
 
 const authRoutes = require("./routes/auth");
+const alertsRoutes = require("./routes/alerts");
 const profileRoutes = require("./routes/profile");
 const medicalRoutes = require("./routes/medical");
 const uploadRoutes = require("./routes/upload");
@@ -20,6 +21,7 @@ app.use(morgan("dev"));
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/alerts", alertsRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/medical", medicalRoutes);
 app.use("/api/upload", uploadRoutes);
