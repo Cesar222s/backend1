@@ -14,7 +14,7 @@ async function auth(req, res, next) {
   const firebase = getFirebaseApp();
   if (firebase) {
     try {
-      const decoded = await admin.auth().verifyIdToken(token);
+      const decoded = await firebase.auth().verifyIdToken(token);
       const email = (decoded.email || "").toLowerCase();
 
       if (!email) {
@@ -32,6 +32,7 @@ async function auth(req, res, next) {
       req.authProvider = "firebase";
       return next();
     } catch (_err) {
+      console.warn("Firebase token validation failed in auth middleware");
       return res.status(401).json({ message: "Invalid token" });
     }
   }
