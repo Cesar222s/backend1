@@ -13,6 +13,7 @@ const medicalRoutes = require("./routes/medical");
 const uploadRoutes = require("./routes/upload");
 const settingsRoutes = require("./routes/settings");
 const contactsRoutes = require("./routes/contacts");
+const tripsRoutes = require("./routes/trips");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/api/medical", medicalRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/contacts", contactsRoutes);
+app.use("/api/trips", tripsRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
