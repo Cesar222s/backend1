@@ -11,6 +11,8 @@ const alertsRoutes = require("./routes/alerts");
 const profileRoutes = require("./routes/profile");
 const medicalRoutes = require("./routes/medical");
 const uploadRoutes = require("./routes/upload");
+const settingsRoutes = require("./routes/settings");
+const contactsRoutes = require("./routes/contacts");
 
 const app = express();
 
@@ -25,6 +27,8 @@ app.use("/api/alerts", alertsRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/medical", medicalRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/contacts", contactsRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
